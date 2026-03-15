@@ -41,10 +41,10 @@ async function cargarProductos(esDestacado) {
             const html = `
                 <div class="col-md-${esDestacado ? '3' : '4'}">
                     <div class="card h-100 shadow-sm">
-                        <img src="https://via.placeholder.com/300x200?text=Producto+${prod.id_producto}" class="card-img-top" alt="${prod.nombre}">
+                        <img src="../assets/img/prod-${prod.id_producto}.jpg" class="card-img-top" alt="${prod.nombre}">
                         <div class="card-body text-center">
                             <h5 class="card-title">${prod.nombre}</h5>
-                            <p class="card-text fw-bold text-primary">$${parseFloat(prod.precio).toFixed(2)}</p>
+                            <p class="card-text fw-bold text-primary">${parseFloat(prod.precio).toFixed(2)} €</p>
                             <a href="producto-detalle.html?id=${prod.id_producto}" class="btn ${esDestacado ? 'btn-outline-primary' : 'btn-primary'} w-100">
                                 ${esDestacado ? 'Ver Detalles' : 'Comprar'}
                             </a>
@@ -72,13 +72,19 @@ async function cargarDetalleProducto() {
     try {
         const respuesta = await fetch(`${API_URL}/productos.php?id=${idProducto}`);
         if (!respuesta.ok) throw new Error("Producto no encontrado");
-        
+
         const prod = await respuesta.json();
 
         document.getElementById('prod-nombre').innerText = prod.nombre;
-        document.getElementById('prod-precio').innerText = `$${parseFloat(prod.precio).toFixed(2)}`;
+        document.getElementById('prod-precio').innerText = `${parseFloat(prod.precio).toFixed(2)} €`;
+        const imgElement = document.getElementById('prod-img');
+        if (imgElement) {
+            imgElement.src = `../assets/img/prod-${prod.id_producto}.jpg`;
+            // Si no encuentra la imagen, carga la de por defecto
+            imgElement.onerror = () => imgElement.src = '../assets/img/default.jpg';
+        }
         document.getElementById('prod-desc').innerText = prod.descripcion || "Sin descripción disponible.";
-        
+
         // Configurar el botón de añadir al carrito
         const btnAñadir = document.querySelector('button.btn-success');
         btnAñadir.onclick = () => agregarAlCarrito(prod.id_producto);
@@ -153,12 +159,12 @@ function actualizarUIUsuario() {
     // Si el usuario está logueado, cambiar "Entrar" por "Mi Cuenta / Salir" en la navbar
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
     const loginLink = document.querySelector('a[href="login.html"]');
-    
+
     if (usuarioLogueado && loginLink) {
         loginLink.innerHTML = `👤 Hola, ${usuarioLogueado.nombre}`;
         loginLink.href = "#";
         loginLink.onclick = () => {
-            if(confirm("¿Deseas cerrar sesión?")) {
+            if (confirm("¿Deseas cerrar sesión?")) {
                 localStorage.removeItem('usuario');
                 window.location.reload();
             }
@@ -172,7 +178,7 @@ function actualizarUIUsuario() {
 
 async function agregarAlCarrito(idProducto) {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
-    
+
     if (!usuarioLogueado) {
         alert("Debes iniciar sesión para añadir productos al carrito.");
         window.location.href = 'login.html';
@@ -183,12 +189,12 @@ async function agregarAlCarrito(idProducto) {
         const respuesta = await fetch(`${API_URL}/carrito.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                id_usuario: usuarioLogueado.id_usuario, 
-                id_producto: idProducto 
+            body: JSON.stringify({
+                id_usuario: usuarioLogueado.id_usuario,
+                id_producto: idProducto
             })
         });
-        
+
         if (respuesta.ok) {
             alert("Producto añadido al carrito con éxito.");
         } else {
@@ -203,7 +209,7 @@ async function agregarAlCarrito(idProducto) {
 async function cargarCarrito() {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
     const tabla = document.getElementById('tabla-carrito');
-    
+
     if (!usuarioLogueado) {
         tabla.innerHTML = '<tr><td colspan="4" class="text-center">Inicia sesión para ver tu carrito</td></tr>';
         return;
@@ -225,12 +231,12 @@ async function cargarCarrito() {
                     <tr>
                         <td>
                             <div class="d-flex align-items-center">
-                                <img src="https://via.placeholder.com/50?text=IMG" class="me-3" alt="...">
+                                <img src="../assets/img/prod-${prod.id_producto}.jpg" width="50" class="me-3 rounded" alt="${prod.nombre}" onerror="this.src='../assets/img/default.jpg'">
                                 <span>${prod.nombre}</span>
                             </div>
                         </td>
                         <td><input type="number" class="form-control w-50" value="1" min="1" disabled></td>
-                        <td>$${parseFloat(prod.precio).toFixed(2)}</td>
+                        <td>${parseFloat(prod.precio).toFixed(2)} €</td>
                         <td><button class="btn btn-sm btn-outline-danger">X</button></td>
                     </tr>
                 `;
@@ -241,9 +247,9 @@ async function cargarCarrito() {
         const resumenElementos = document.querySelectorAll('.card-body .d-flex span:nth-child(2)');
         if (resumenElementos.length >= 3) {
             const envio = subtotal > 0 ? 5.00 : 0;
-            resumenElementos[0].innerText = `$${subtotal.toFixed(2)}`;
-            resumenElementos[1].innerText = `$${envio.toFixed(2)}`;
-            resumenElementos[2].innerText = `$${(subtotal + envio).toFixed(2)}`;
+            resumenElementos[0].innerText = `${subtotal.toFixed(2)} €`;
+            resumenElementos[1].innerText = `${envio.toFixed(2)} €`;
+            resumenElementos[2].innerText = `${(subtotal + envio).toFixed(2)} €`;
         }
 
     } catch (error) {
