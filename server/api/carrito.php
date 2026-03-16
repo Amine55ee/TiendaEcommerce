@@ -82,5 +82,63 @@ switch ($metodo) {
         $stmt->execute([':user' => $id_usuario]);
         echo json_encode($stmt->fetchAll());
         break;
+        
+    case 'PUT':
+        // ACTUALIZAR CANTIDAD EN EL CARRITO
+        $datos = json_decode(file_get_contents("php://input"));
+        $id_usuario = $datos->id_usuario ?? null;
+        $id_producto = $datos->id_producto ?? null;
+        $cantidad = $datos->cantidad ?? null;
+
+        if (!$id_usuario || !$id_producto || $cantidad === null) {
+            http_response_code(400);
+            echo json_encode(["mensaje" => "Faltan datos para actualizar"]);
+            exit();
+        }
+
+        try {
+            // Buscar el pedido pendiente del usuario
+            $stmt = $pdo->prepare("SELECT p.id_pedido FROM Pedido p JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido = 'Pendiente'");
+            $stmt->execute([':user' => $id_usuario]);
+            $pedido = $stmt->fetch();
+
+            if ($pedido) {
+                // Actualizar la cantidad exacta en el detalle
+                $stmt = $pdo->prepare("UPDATE Detalle_Pedido SET cantidad = :cant WHERE id_pedido = :pedido AND id_producto = :producto");
+                $stmt->execute([':cant' => $cantidad, ':pedido' => $pedido['id_pedido'], ':producto' => $id_producto]);
+                echo json_encode(["mensaje" => "Cantidad actualizada"]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["mensaje" => "Error al actualizar: " . $e->getMessage()]);
+        }
+        break;
+
+    case 'DELETE':
+        // ELIMINAR UN PRODUCTO DEL CARRITO
+        $id_usuario = $_GET['id_usuario'] ?? null;
+        $id_producto = $_GET['id_producto'] ?? null;
+
+        if (!$id_usuario || !$id_producto) {
+            http_response_code(400);
+            echo json_encode(["mensaje" => "Faltan datos para eliminar"]);
+            exit();
+        }
+
+        try {
+            $stmt = $pdo->prepare("SELECT p.id_pedido FROM Pedido p JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido = 'Pendiente'");
+            $stmt->execute([':user' => $id_usuario]);
+            $pedido = $stmt->fetch();
+
+            if ($pedido) {
+                $stmt = $pdo->prepare("DELETE FROM Detalle_Pedido WHERE id_pedido = :pedido AND id_producto = :producto");
+                $stmt->execute([':pedido' => $pedido['id_pedido'], ':producto' => $id_producto]);
+                echo json_encode(["mensaje" => "Producto eliminado"]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["mensaje" => "Error al eliminar: " . $e->getMessage()]);
+        }
+        break;
 }
 ?>

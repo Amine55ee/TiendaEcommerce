@@ -41,7 +41,7 @@ async function cargarProductos(esDestacado) {
             const html = `
                 <div class="col-md-${esDestacado ? '3' : '4'}">
                     <div class="card h-100 shadow-sm">
-                        <img src="../assets/img/prod-${prod.id_producto}.jpg" class="card-img-top" alt="${prod.nombre}">
+                        <img src="../assets/img/prod-${prod.id_producto}.jpg" class="card-img-top" alt="${prod.nombre}" onerror="this.src='../assets/img/default.jpg'">
                         <div class="card-body text-center">
                             <h5 class="card-title">${prod.nombre}</h5>
                             <p class="card-text fw-bold text-primary">${parseFloat(prod.precio).toFixed(2)} €</p>
@@ -156,19 +156,79 @@ function inicializarAuth() {
 }
 
 function actualizarUIUsuario() {
-    // Si el usuario está logueado, cambiar "Entrar" por "Mi Cuenta / Salir" en la navbar
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
     const loginLink = document.querySelector('a[href="login.html"]');
 
     if (usuarioLogueado && loginLink) {
         loginLink.innerHTML = `👤 Hola, ${usuarioLogueado.nombre}`;
         loginLink.href = "#";
-        loginLink.onclick = () => {
-            if (confirm("¿Deseas cerrar sesión?")) {
+        loginLink.onclick = (e) => {
+            e.preventDefault();
+            // Menú rápido de gestión de cuenta simulado con prompt
+            const accion = prompt("Gestión de tu cuenta:\n\n1. Cambiar tu nombre\n2. Eliminar cuenta definitivamente\n3. Cerrar Sesión\n\nIntroduce el número de la opción (1, 2 o 3):");
+            
+            if (accion === "1") {
+                const nuevoNombre = prompt("Introduce tu nuevo nombre:", usuarioLogueado.nombre);
+                if (nuevoNombre && nuevoNombre.trim() !== "" && nuevoNombre !== usuarioLogueado.nombre) {
+                    modificarPerfil(usuarioLogueado, nuevoNombre);
+                }
+            } else if (accion === "2") {
+                if (confirm("⚠️ ¿Seguro que deseas ELIMINAR tu cuenta? Perderás el acceso a GlobalMarket. Esta acción no se puede deshacer.")) {
+                    eliminarPerfil(usuarioLogueado.id_usuario);
+                }
+            } else if (accion === "3") {
                 localStorage.removeItem('usuario');
                 window.location.reload();
             }
         };
+    }
+}
+
+// Función para aplicar el UPDATE al servidor
+async function modificarPerfil(usuario, nuevoNombre) {
+    try {
+        const respuesta = await fetch(`${API_URL}/usuarios.php`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                id_usuario: usuario.id_usuario, 
+                nombre: nuevoNombre,
+                apellidos: usuario.apellidos || '',
+                telefono: usuario.telefono || '',
+                direccion: usuario.direccion || ''
+            })
+        });
+        const data = await respuesta.json();
+        
+        if (respuesta.ok) {
+            alert("Tu nombre ha sido actualizado con éxito.");
+            localStorage.setItem('usuario', JSON.stringify(data.usuario));
+            window.location.reload();
+        } else {
+            alert("Error: " + data.mensaje);
+        }
+    } catch (error) {
+        console.error("Error al actualizar:", error);
+    }
+}
+
+// Función para aplicar el DELETE al servidor
+async function eliminarPerfil(idUsuario) {
+    try {
+        const respuesta = await fetch(`${API_URL}/usuarios.php?id=${idUsuario}`, {
+            method: 'DELETE'
+        });
+        const data = await respuesta.json();
+        
+        if (respuesta.ok) {
+            alert("Cuenta eliminada correctamente. ¡Hasta pronto!");
+            localStorage.removeItem('usuario');
+            window.location.href = 'index.html';
+        } else {
+            alert("No se pudo eliminar: " + data.mensaje);
+        }
+    } catch (error) {
+        console.error("Error al eliminar cuenta:", error);
     }
 }
 
@@ -196,7 +256,7 @@ async function agregarAlCarrito(idProducto) {
             body: JSON.stringify({ 
                 id_usuario: usuarioLogueado.id_usuario, 
                 id_producto: idProducto,
-                cantidad: cantidad // Novedad: Enviar la cantidad a la API
+                cantidad: cantidad // Enviar la cantidad a la API
             })
         });
         
@@ -242,9 +302,15 @@ async function cargarCarrito() {
                                 <span>${prod.nombre}</span>
                             </div>
                         </td>
-                        <td><input type="number" class="form-control w-50" value="${prod.cantidad}" min="1" disabled></td>
+                        <td>
+                            <div class="input-group input-group-sm" style="width: 110px;">
+                                <button class="btn btn-outline-secondary" onclick="modificarCantidadCarrito(${prod.id_producto}, ${prod.cantidad - 1})">-</button>
+                                <input type="text" class="form-control text-center" value="${prod.cantidad}" readonly>
+                                <button class="btn btn-outline-secondary" onclick="modificarCantidadCarrito(${prod.id_producto}, ${prod.cantidad + 1})">+</button>
+                            </div>
+                        </td>
                         <td>${parseFloat(prod.precio).toFixed(2)} €</td>
-                        <td><button class="btn btn-sm btn-outline-danger">X</button></td>
+                        <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarProductoCarrito(${prod.id_producto})">X</button></td>
                     </tr>
                 `;
             });
@@ -261,5 +327,45 @@ async function cargarCarrito() {
 
     } catch (error) {
         console.error("Error cargando carrito:", error);
+    }
+}
+
+// Funciones para modificar y eliminar productos del carrito
+async function modificarCantidadCarrito(idProducto, nuevaCantidad) {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    
+    // Si la cantidad baja a 0, se elimina el producto directamente
+    if (nuevaCantidad <= 0) {
+        return eliminarProductoCarrito(idProducto);
+    }
+
+    try {
+        await fetch(`${API_URL}/carrito.php`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_usuario: usuarioLogueado.id_usuario,
+                id_producto: idProducto,
+                cantidad: nuevaCantidad
+            })
+        });
+        cargarCarrito(); // Recargar la tabla para mostrar los nuevos totales
+    } catch (error) {
+        console.error("Error al actualizar cantidad:", error);
+    }
+}
+
+async function eliminarProductoCarrito(idProducto) {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    
+    if(confirm("¿Seguro que deseas quitar este producto del carrito?")) {
+        try {
+            await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}&id_producto=${idProducto}`, {
+                method: 'DELETE'
+            });
+            cargarCarrito(); // Recargar la tabla para reflejar el borrado
+        } catch (error) {
+            console.error("Error al eliminar producto:", error);
+        }
     }
 }

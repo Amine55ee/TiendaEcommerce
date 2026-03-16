@@ -6,11 +6,12 @@
     <title>Carrito - GlobalMarket</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="css/style.css" rel="stylesheet">
+    <link rel="shortcut icon" href="../assets/img/logo.png">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="index.html">GlobalMarket</a>
+            <a class="navbar-brand text-warning" href="index.html">GlobalMarket</a>
         </div>
     </nav>
 
@@ -28,17 +29,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-carrito">
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="https://via.placeholder.com/50" class="me-3" alt="...">
-                                    <span>Nombre del producto</span>
-                                </div>
-                            </td>
-                            <td><input type="number" class="form-control w-50" value="1" min="1"></td>
-                            <td>19.99 €</td>
-                            <td><button class="btn btn-sm btn-danger">Eliminar</button></td>
-                        </tr>
+                    
                     </tbody>
                 </table>
             </div>
@@ -50,22 +41,25 @@
                         <hr>
                         <div class="d-flex justify-content-between mb-2">
                             <span>Subtotal</span>
-                            <span>19.99 €</span>
+                            <span>00.00 €</span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
                             <span>Envío</span>
-                            <span>5.00 €</span>
+                            <span>0.00 €</span>
                         </div>
                         <div class="d-flex justify-content-between mb-3 fw-bold fs-5">
                             <span>Total</span>
-                            <span>24.99 €</span>
+                            <span>0.00 €</span>
                         </div>
                         <button class="btn btn-primary w-100">Pagar de forma segura</button>
+                        <a href="productos.html" class="btn btn-outline-secondary w-100 mt-2">Volver a la Tienda</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
