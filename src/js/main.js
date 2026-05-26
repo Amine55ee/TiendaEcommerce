@@ -68,8 +68,14 @@ async function cargarDetalleProducto() {
         }
         document.getElementById('prod-desc').innerText = prod.descripcion || "Sin descripción disponible.";
 
-        const btnAñadir = document.querySelector('button.btn-success');
-        if (btnAñadir) btnAñadir.onclick = () => agregarAlCarrito(prod.id_producto);
+        // CORRECCIÓN: Captura segura del botón de añadir
+        const btnAñadir = document.getElementById('btn-add-cart');
+        if (btnAñadir) {
+            btnAñadir.onclick = (e) => {
+                e.preventDefault();
+                agregarAlCarrito(prod.id_producto);
+            };
+        }
 
     } catch (error) {
         document.getElementById('prod-nombre').innerText = "Error al cargar el producto";
@@ -221,12 +227,15 @@ async function cargarCarrito() {
     if (!usuarioLogueado) return tabla.innerHTML = '<tr><td colspan="4" class="text-center py-4">Inicia sesión para ver tu carrito</td></tr>';
 
     try {
-        const respuesta = await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}`);
+        // CORRECCIÓN: Evitar la caché agregando un sello de tiempo único
+        const urlSegura = `${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}&t=${Date.now()}`;
+        const respuesta = await fetch(urlSegura);
         const productosCarrito = await respuesta.json();
+        
         tabla.innerHTML = '';
         let subtotal = 0;
 
-        if (productosCarrito.length === 0) {
+        if (!productosCarrito || productosCarrito.length === 0) {
             tabla.innerHTML = '<tr><td colspan="4" class="text-center py-4">Tu carrito está vacío</td></tr>';
         } else {
             productosCarrito.forEach(prod => {

@@ -1,7 +1,9 @@
 <?php
+// Cabeceras Anti-Caché añadidas
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Cache-Control: no-cache, no-store, must-revalidate"); 
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -15,9 +17,7 @@ try {
     $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8", $db_user, $db_pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(["mensaje" => "Error de conexión a la BD"]);
-    exit();
+    http_response_code(500); echo json_encode(["mensaje" => "Error de conexión a la BD"]); exit();
 }
 
 $metodo = $_SERVER['REQUEST_METHOD'];
@@ -56,11 +56,13 @@ switch ($metodo) {
 
         try {
             $pdo->beginTransaction();
+            // Buscar carrito pendiente
             $stmt = $pdo->prepare("SELECT p.id_pedido FROM Pedido p JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido = 'Pendiente'");
             $stmt->execute([':user' => $id_usuario]);
             $pedido = $stmt->fetch();
             
             if (!$pedido) {
+                // Crear nuevo carrito si no existe
                 $stmtPedido = $pdo->prepare("INSERT INTO Pedido (total, estado_pedido) VALUES (0, 'Pendiente')");
                 $stmtPedido->execute();
                 $id_pedido = $pdo->lastInsertId();
@@ -70,21 +72,20 @@ switch ($metodo) {
                 $id_pedido = $pedido['id_pedido'];
             }
 
+            // Comprobar si el producto ya está en el carrito
             $stmtCheck = $pdo->prepare("SELECT cantidad FROM Detalle_Pedido WHERE id_pedido = :pedido AND id_producto = :producto");
             $stmtCheck->execute([':pedido' => $id_pedido, ':producto' => $id_producto]);
             $detalle = $stmtCheck->fetch();
 
             if ($detalle) {
+                // Actualizar cantidad
                 $nueva_cantidad = $detalle['cantidad'] + $cantidad;
                 $stmtUpdate = $pdo->prepare("UPDATE Detalle_Pedido SET cantidad = :cant WHERE id_pedido = :pedido AND id_producto = :producto");
                 $stmtUpdate->execute([':cant' => $nueva_cantidad, ':pedido' => $id_pedido, ':producto' => $id_producto]);
             } else {
-                $stmtPrecio = $pdo->prepare("SELECT precio FROM Producto WHERE id_producto = :id");
-                $stmtPrecio->execute([':id' => $id_producto]);
-                $precio = $stmtPrecio->fetchColumn();
-
-                $stmtInsert = $pdo->prepare("INSERT INTO Detalle_Pedido (id_pedido, id_producto, cantidad, precio_unitario) VALUES (:pedido, :producto, :cant, :precio)");
-                $stmtInsert->execute([':pedido' => $id_pedido, ':producto' => $id_producto, ':cant' => $cantidad, ':precio' => $precio]);
+                // Inserción segura (sin precio_unitario para evitar errores de esquema)
+                $stmtInsert = $pdo->prepare("INSERT INTO Detalle_Pedido (id_pedido, id_producto, cantidad) VALUES (:pedido, :producto, :cant)");
+                $stmtInsert->execute([':pedido' => $id_pedido, ':producto' => $id_producto, ':cant' => $cantidad]);
             }
             
             $pdo->commit();
