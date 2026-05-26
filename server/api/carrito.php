@@ -1,5 +1,4 @@
 <?php
-// Cabeceras Anti-Caché añadidas
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
@@ -7,18 +6,10 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+    http_response_code(200); exit();
 }
 
-require_once '../config/database.php';
-
-try {
-    $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    http_response_code(500); echo json_encode(["mensaje" => "Error de conexión a la BD"]); exit();
-}
+require_once '../config.php';
 
 $metodo = $_SERVER['REQUEST_METHOD'];
 
@@ -28,19 +19,23 @@ switch ($metodo) {
         $historial = $_GET['historial'] ?? null;
         
         if (!$id_usuario) {
-            http_response_code(400); echo json_encode(["mensaje" => "Requerido id_usuario"]); exit();
+            http_response_code(400); echo json_encode(["mensaje" => "Falta ID usuario"]); exit();
         }
         
-        if ($historial) {
-            $sql = "SELECT p.id_pedido, p.fecha_pedido, p.total, p.estado_pedido FROM Pedido p JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido != 'Pendiente' ORDER BY p.fecha_pedido DESC";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([':user' => $id_usuario]);
-            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-        } else {
-            $sql = "SELECT prod.id_producto, prod.nombre, prod.precio, dp.cantidad FROM Producto prod JOIN Detalle_Pedido dp ON prod.id_producto = dp.id_producto JOIN Pedido p ON dp.id_pedido = p.id_pedido JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido = 'Pendiente'";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([':user' => $id_usuario]);
-            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        try {
+            if ($historial) {
+                $sql = "SELECT p.id_pedido, p.fecha_pedido, p.total, p.estado_pedido FROM Pedido p JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido != 'Pendiente' ORDER BY p.fecha_pedido DESC";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([':user' => $id_usuario]);
+                echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+            } else {
+                $sql = "SELECT prod.id_producto, prod.nombre, prod.precio, dp.cantidad FROM Producto prod JOIN Detalle_Pedido dp ON prod.id_producto = dp.id_producto JOIN Pedido p ON dp.id_pedido = p.id_pedido JOIN Hace h ON p.id_pedido = h.id_pedido WHERE h.id_usuario = :user AND p.estado_pedido = 'Pendiente'";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([':user' => $id_usuario]);
+                echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+            }
+        } catch (Exception $e) {
+            http_response_code(500); echo json_encode(["mensaje" => "Error SQL GET: " . $e->getMessage()]);
         }
         break;
 
@@ -50,10 +45,6 @@ switch ($metodo) {
         $id_producto = $datos->id_producto ?? null;
         $cantidad = $datos->cantidad ?? 1;
 
-        if (!$id_usuario || !$id_producto) {
-            http_response_code(400); echo json_encode(["mensaje" => "Datos incompletos"]); exit();
-        }
-
         try {
             $pdo->beginTransaction();
             // Buscar carrito pendiente
@@ -62,7 +53,6 @@ switch ($metodo) {
             $pedido = $stmt->fetch();
             
             if (!$pedido) {
-                // Crear nuevo carrito si no existe
                 $stmtPedido = $pdo->prepare("INSERT INTO Pedido (total, estado_pedido) VALUES (0, 'Pendiente')");
                 $stmtPedido->execute();
                 $id_pedido = $pdo->lastInsertId();
@@ -72,27 +62,24 @@ switch ($metodo) {
                 $id_pedido = $pedido['id_pedido'];
             }
 
-            // Comprobar si el producto ya está en el carrito
+            // CORRECCIÓN AQUÍ: Inserción simplificada
             $stmtCheck = $pdo->prepare("SELECT cantidad FROM Detalle_Pedido WHERE id_pedido = :pedido AND id_producto = :producto");
             $stmtCheck->execute([':pedido' => $id_pedido, ':producto' => $id_producto]);
             $detalle = $stmtCheck->fetch();
 
             if ($detalle) {
-                // Actualizar cantidad
-                $nueva_cantidad = $detalle['cantidad'] + $cantidad;
-                $stmtUpdate = $pdo->prepare("UPDATE Detalle_Pedido SET cantidad = :cant WHERE id_pedido = :pedido AND id_producto = :producto");
-                $stmtUpdate->execute([':cant' => $nueva_cantidad, ':pedido' => $id_pedido, ':producto' => $id_producto]);
+                $stmtUpdate = $pdo->prepare("UPDATE Detalle_Pedido SET cantidad = cantidad + :cant WHERE id_pedido = :pedido AND id_producto = :producto");
+                $stmtUpdate->execute([':cant' => $cantidad, ':pedido' => $id_pedido, ':producto' => $id_producto]);
             } else {
-                // Inserción segura (sin precio_unitario para evitar errores de esquema)
                 $stmtInsert = $pdo->prepare("INSERT INTO Detalle_Pedido (id_pedido, id_producto, cantidad) VALUES (:pedido, :producto, :cant)");
                 $stmtInsert->execute([':pedido' => $id_pedido, ':producto' => $id_producto, ':cant' => $cantidad]);
             }
             
             $pdo->commit();
-            echo json_encode(["mensaje" => "Producto añadido al carrito"]);
+            echo json_encode(["mensaje" => "Producto añadido"]);
         } catch (Exception $e) {
             $pdo->rollBack();
-            http_response_code(500); echo json_encode(["mensaje" => "Error interno al añadir al carrito"]);
+            http_response_code(500); echo json_encode(["mensaje" => "Error SQL: " . $e->getMessage()]);
         }
         break;
 
@@ -102,7 +89,7 @@ switch ($metodo) {
         if (isset($datos->accion) && $datos->accion === 'pagar') {
             $id_usuario = $datos->id_usuario ?? null;
             if (!$id_usuario) {
-                http_response_code(400); echo json_encode(["mensaje" => "Falta id_usuario"]); exit();
+                http_response_code(400); echo json_encode(["mensaje" => "Falta id_usuario para pagar"]); exit();
             }
             try {
                 $pdo->beginTransaction();
@@ -123,14 +110,14 @@ switch ($metodo) {
                     $stmtPago->execute([':id_pedido' => $pedido['id_pedido']]);
 
                     $pdo->commit();
-                    echo json_encode(["mensaje" => "Pago procesado con éxito"]);
+                    echo json_encode(["mensaje" => "Pago procesado"]);
                 } else {
                     $pdo->rollBack();
                     http_response_code(404); echo json_encode(["mensaje" => "No hay carrito activo"]);
                 }
             } catch (Exception $e) {
                 $pdo->rollBack();
-                http_response_code(500); echo json_encode(["mensaje" => "Error al pagar"]);
+                http_response_code(500); echo json_encode(["mensaje" => "Error al pagar: " . $e->getMessage()]);
             }
             break;
         }
@@ -140,7 +127,7 @@ switch ($metodo) {
         $cantidad = $datos->cantidad ?? null;
 
         if (!$id_usuario || !$id_producto || $cantidad === null) {
-            http_response_code(400); echo json_encode(["mensaje" => "Datos incompletos"]); exit();
+            http_response_code(400); echo json_encode(["mensaje" => "Datos incompletos para actualizar"]); exit();
         }
 
         try {
@@ -154,7 +141,7 @@ switch ($metodo) {
                 echo json_encode(["mensaje" => "Cantidad actualizada"]);
             }
         } catch (Exception $e) {
-            http_response_code(500); echo json_encode(["mensaje" => "Error al actualizar"]);
+            http_response_code(500); echo json_encode(["mensaje" => "Error PUT: " . $e->getMessage()]);
         }
         break;
 
@@ -174,7 +161,7 @@ switch ($metodo) {
                     echo json_encode(["mensaje" => "Producto eliminado"]);
                 }
             } catch (Exception $e) {
-                http_response_code(500); echo json_encode(["mensaje" => "Error al eliminar"]);
+                http_response_code(500); echo json_encode(["mensaje" => "Error DELETE: " . $e->getMessage()]);
             }
         }
         break;
