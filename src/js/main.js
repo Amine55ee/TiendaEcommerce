@@ -1,40 +1,28 @@
-// URL base de la API. Ajustar según la ruta del servidor local (XAMPP/MAMP)
-const API_URL = 'http://localhost/GLOBALMARKET/server/api';
+// URL base de la API mediante ruta relativa. 
+// Elimina para siempre los errores de seguridad (CORS) por nombres de carpetas.
+const API_URL = '../server/api';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Enrutador básico: Detecta en qué página estamos según los elementos del DOM
-    if (document.getElementById('featured-products')) {
-        cargarProductos(true); // Cargar solo destacados en index.html
-    }
-    if (document.getElementById('catalogo-grid')) {
-        cargarProductos(false); // Cargar todo el catálogo en productos.html
-    }
-    if (document.getElementById('prod-nombre')) {
-        cargarDetalleProducto(); // Cargar detalle de un producto específico
-    }
-    if (document.getElementById('form-login')) {
-        inicializarAuth(); // Configurar eventos de login y registro
-    }
-    if (document.getElementById('tabla-carrito')) {
-        cargarCarrito(); // Mostrar los productos añadidos al carrito
-    }
-
+    if (document.getElementById('featured-products')) cargarProductos(true);
+    if (document.getElementById('catalogo-grid')) cargarProductos(false);
+    if (document.getElementById('prod-nombre')) cargarDetalleProducto();
+    if (document.getElementById('form-login') || document.getElementById('form-registro')) inicializarAuth();
+    if (document.getElementById('tabla-carrito')) cargarCarrito();
+    if (document.getElementById('tabla-admin-pedidos')) inicializarAdmin();
+    
     actualizarUIUsuario();
 });
 
 // ==========================================
 // 1. GESTIÓN DE PRODUCTOS
 // ==========================================
-
 async function cargarProductos(esDestacado) {
     try {
         const respuesta = await fetch(`${API_URL}/productos.php`);
         const productos = await respuesta.json();
-
         const contenedor = document.getElementById(esDestacado ? 'featured-products' : 'catalogo-grid');
-        contenedor.innerHTML = ''; // Limpiar estado de carga
+        contenedor.innerHTML = ''; 
 
-        // Si es destacado, mostrar solo los primeros 4
         const productosAMostrar = esDestacado ? productos.slice(0, 4) : productos;
 
         productosAMostrar.forEach(prod => {
@@ -60,192 +48,151 @@ async function cargarProductos(esDestacado) {
 }
 
 async function cargarDetalleProducto() {
-    // Obtener el ID de la URL (ej: producto-detalle.html?id=2)
     const urlParams = new URLSearchParams(window.location.search);
     const idProducto = urlParams.get('id');
 
-    if (!idProducto) {
-        document.getElementById('prod-nombre').innerText = "Producto no encontrado";
-        return;
-    }
+    if (!idProducto) return document.getElementById('prod-nombre').innerText = "Producto no encontrado";
 
     try {
         const respuesta = await fetch(`${API_URL}/productos.php?id=${idProducto}`);
         if (!respuesta.ok) throw new Error("Producto no encontrado");
 
         const prod = await respuesta.json();
-
         document.getElementById('prod-nombre').innerText = prod.nombre;
         document.getElementById('prod-precio').innerText = `${parseFloat(prod.precio).toFixed(2)} €`;
+        
         const imgElement = document.getElementById('prod-img');
         if (imgElement) {
             imgElement.src = `../assets/img/prod-${prod.id_producto}.jpg`;
-            // Si no encuentra la imagen, carga la de por defecto
             imgElement.onerror = () => imgElement.src = '../assets/img/default.jpg';
         }
         document.getElementById('prod-desc').innerText = prod.descripcion || "Sin descripción disponible.";
 
-        // Configurar el botón de añadir al carrito
         const btnAñadir = document.querySelector('button.btn-success');
-        btnAñadir.onclick = () => agregarAlCarrito(prod.id_producto);
+        if (btnAñadir) btnAñadir.onclick = () => agregarAlCarrito(prod.id_producto);
 
     } catch (error) {
-        console.error("Error:", error);
         document.getElementById('prod-nombre').innerText = "Error al cargar el producto";
     }
 }
 
 // ==========================================
-// 2. AUTENTICACIÓN (LOGIN Y REGISTRO)
+// 2. AUTENTICACIÓN Y USUARIO
 // ==========================================
-
 function inicializarAuth() {
     const formLogin = document.getElementById('form-login');
     const formRegistro = document.getElementById('form-registro');
 
-    formLogin.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = formLogin.querySelector('input[type="email"]').value;
-        const contrasena = formLogin.querySelector('input[type="password"]').value;
+    if (formLogin) {
+        formLogin.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = formLogin.querySelector('input[type="email"]').value;
+            const contrasena = formLogin.querySelector('input[type="password"]').value;
 
-        try {
-            const respuesta = await fetch(`${API_URL}/usuarios.php`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accion: 'login', email, contrasena })
-            });
-            const data = await respuesta.json();
+            try {
+                const respuesta = await fetch(`${API_URL}/usuarios.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accion: 'login', email, contrasena })
+                });
+                const data = await respuesta.json();
 
-            if (respuesta.ok) {
-                alert("Bienvenido a GlobalMarket");
-                localStorage.setItem('usuario', JSON.stringify(data.usuario));
-                window.location.href = 'index.html';
-            } else {
-                alert(data.mensaje || "Error en credenciales");
+                if (respuesta.ok) {
+                    localStorage.setItem('usuario', JSON.stringify(data.usuario));
+                    if (data.usuario.email === 'admin@globalmarket.com') {
+                        window.location.href = 'dashboard.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Acceso Denegado', text: data.mensaje || "Credenciales incorrectas", confirmButtonColor: '#d33' });
+                }
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Fallo de conexión con el servidor.' });
             }
-        } catch (error) {
-            console.error("Error de red:", error);
-        }
-    });
+        });
+    }
 
-    formRegistro.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const inputs = formRegistro.querySelectorAll('input');
-        const nombre = inputs[0].value;
-        const email = inputs[1].value;
-        const contrasena = inputs[2].value;
+    if (formRegistro) {
+        formRegistro.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const datos = {
+                accion: 'registro',
+                nombre: document.getElementById('reg-nombre').value,
+                apellidos: document.getElementById('reg-apellidos').value,
+                email: document.getElementById('reg-email').value,
+                telefono: document.getElementById('reg-telefono').value,
+                contrasena: document.getElementById('reg-contrasena').value,
+                direccion: document.getElementById('reg-direccion').value
+            };
 
-        try {
-            const respuesta = await fetch(`${API_URL}/usuarios.php`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accion: 'registro', nombre, email, contrasena })
-            });
-            const data = await respuesta.json();
+            try {
+                const respuesta = await fetch(`${API_URL}/usuarios.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datos)
+                });
+                const data = await respuesta.json();
 
-            if (respuesta.ok) {
-                alert("Registro exitoso. Ahora puedes iniciar sesión.");
-                formRegistro.reset();
-            } else {
-                alert(data.mensaje || "Error al registrar");
+                if (respuesta.ok) {
+                    Swal.fire({ icon: 'success', title: '¡Registro completado!', text: 'Redirigiendo...', showConfirmButton: false, timer: 2000 }).then(() => {
+                        window.location.href = 'login.html';
+                    });
+                } else {
+                    let msj = data.mensaje && data.mensaje.includes("Duplicate entry") ? "Este correo electrónico ya está registrado." : data.mensaje;
+                    Swal.fire({ icon: 'warning', title: 'No se pudo registrar', text: msj || 'Error de registro', confirmButtonColor: '#f39c12' });
+                }
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Fallo de conexión con el servidor.' });
             }
-        } catch (error) {
-            console.error("Error de red:", error);
-        }
-    });
+        });
+    }
 }
 
 function actualizarUIUsuario() {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
-    const loginLink = document.querySelector('a[href="login.html"]');
+    const navLogin = document.getElementById('nav-login');
+    const navUser = document.getElementById('nav-user');
+    
+    if (usuarioLogueado) {
+        if (navLogin) navLogin.style.display = 'none';
+        if (navUser) navUser.style.display = 'block';
+        const spanNombre = document.getElementById('nombre-usuario');
+        if (spanNombre) spanNombre.innerText = usuarioLogueado.nombre;
 
-    if (usuarioLogueado && loginLink) {
-        loginLink.innerHTML = `👤 Hola, ${usuarioLogueado.nombre}`;
-        loginLink.href = "#";
-        loginLink.onclick = (e) => {
-            e.preventDefault();
-            // Menú rápido de gestión de cuenta simulado con prompt
-            const accion = prompt("Gestión de tu cuenta:\n\n1. Cambiar tu nombre\n2. Eliminar cuenta definitivamente\n3. Cerrar Sesión\n\nIntroduce el número de la opción (1, 2 o 3):");
-            
-            if (accion === "1") {
-                const nuevoNombre = prompt("Introduce tu nuevo nombre:", usuarioLogueado.nombre);
-                if (nuevoNombre && nuevoNombre.trim() !== "" && nuevoNombre !== usuarioLogueado.nombre) {
-                    modificarPerfil(usuarioLogueado, nuevoNombre);
-                }
-            } else if (accion === "2") {
-                if (confirm("⚠️ ¿Seguro que deseas ELIMINAR tu cuenta? Perderás el acceso a GlobalMarket. Esta acción no se puede deshacer.")) {
-                    eliminarPerfil(usuarioLogueado.id_usuario);
-                }
-            } else if (accion === "3") {
+        const btnCerrarSesion = document.getElementById('btn-cerrar-sesion');
+        if (btnCerrarSesion) {
+            btnCerrarSesion.onclick = (e) => {
+                e.preventDefault();
                 localStorage.removeItem('usuario');
-                window.location.reload();
-            }
-        };
+                window.location.href = 'index.html';
+            };
+        }
+    } else {
+        if (navLogin) navLogin.style.display = 'block';
+        if (navUser) navUser.style.display = 'none';
     }
 }
 
-// Función para aplicar el UPDATE al servidor
-async function modificarPerfil(usuario, nuevoNombre) {
-    try {
-        const respuesta = await fetch(`${API_URL}/usuarios.php`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                id_usuario: usuario.id_usuario, 
-                nombre: nuevoNombre,
-                apellidos: usuario.apellidos || '',
-                telefono: usuario.telefono || '',
-                direccion: usuario.direccion || ''
-            })
-        });
-        const data = await respuesta.json();
-        
-        if (respuesta.ok) {
-            alert("Tu nombre ha sido actualizado con éxito.");
-            localStorage.setItem('usuario', JSON.stringify(data.usuario));
-            window.location.reload();
-        } else {
-            alert("Error: " + data.mensaje);
-        }
-    } catch (error) {
-        console.error("Error al actualizar:", error);
+document.addEventListener('click', function(event) {
+    const menuBtn = document.getElementById('user-menu-btn');
+    const dropdown = document.getElementById('dropdown-content');
+    if (menuBtn && dropdown) {
+        if (menuBtn.contains(event.target)) dropdown.classList.toggle('show-dropdown');
+        else if (!dropdown.contains(event.target)) dropdown.classList.remove('show-dropdown');
     }
-}
-
-// Función para aplicar el DELETE al servidor
-async function eliminarPerfil(idUsuario) {
-    try {
-        const respuesta = await fetch(`${API_URL}/usuarios.php?id=${idUsuario}`, {
-            method: 'DELETE'
-        });
-        const data = await respuesta.json();
-        
-        if (respuesta.ok) {
-            alert("Cuenta eliminada correctamente. ¡Hasta pronto!");
-            localStorage.removeItem('usuario');
-            window.location.href = 'index.html';
-        } else {
-            alert("No se pudo eliminar: " + data.mensaje);
-        }
-    } catch (error) {
-        console.error("Error al eliminar cuenta:", error);
-    }
-}
+});
 
 // ==========================================
-// 3. CARRITO DE COMPRAS
+// 3. CARRITO Y PAGOS
 // ==========================================
-
 async function agregarAlCarrito(idProducto) {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
     
     if (!usuarioLogueado) {
-        alert("Debes iniciar sesión para añadir productos al carrito.");
-        window.location.href = 'login.html';
-        return;
+        return Swal.fire({ icon: 'warning', title: 'Acceso requerido', text: 'Debes iniciar sesión.', confirmButtonText: 'Ir a Entrar' }).then(() => { window.location.href = 'login.html'; });
     }
 
-    // Leer la cantidad del input (si existe, de lo contrario asume 1)
     const inputCantidad = document.getElementById('prod-cantidad');
     const cantidad = inputCantidad ? parseInt(inputCantidad.value) : 1;
 
@@ -253,21 +200,17 @@ async function agregarAlCarrito(idProducto) {
         const respuesta = await fetch(`${API_URL}/carrito.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                id_usuario: usuarioLogueado.id_usuario, 
-                id_producto: idProducto,
-                cantidad: cantidad // Enviar la cantidad a la API
-            })
+            body: JSON.stringify({ id_usuario: usuarioLogueado.id_usuario, id_producto: idProducto, cantidad: cantidad })
         });
         
         if (respuesta.ok) {
-            alert(`Se han añadido ${cantidad} unidad(es) al carrito con éxito.`);
+            Swal.fire({ icon: 'success', title: '¡Añadido!', text: `Se han añadido ${cantidad} unidad(es) al carrito.`, showConfirmButton: false, timer: 1500 });
         } else {
             const data = await respuesta.json();
-            alert("Error: " + data.mensaje);
+            Swal.fire('Error', data.mensaje, 'error');
         }
     } catch (error) {
-        console.error("Error añadiendo al carrito:", error);
+        Swal.fire('Error', 'Fallo de conexión al añadir al carrito', 'error');
     }
 }
 
@@ -275,30 +218,24 @@ async function cargarCarrito() {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
     const tabla = document.getElementById('tabla-carrito');
 
-    if (!usuarioLogueado) {
-        tabla.innerHTML = '<tr><td colspan="4" class="text-center">Inicia sesión para ver tu carrito</td></tr>';
-        return;
-    }
+    if (!usuarioLogueado) return tabla.innerHTML = '<tr><td colspan="4" class="text-center py-4">Inicia sesión para ver tu carrito</td></tr>';
 
     try {
         const respuesta = await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}`);
         const productosCarrito = await respuesta.json();
-
         tabla.innerHTML = '';
         let subtotal = 0;
 
         if (productosCarrito.length === 0) {
-            tabla.innerHTML = '<tr><td colspan="4" class="text-center">Tu carrito está vacío</td></tr>';
+            tabla.innerHTML = '<tr><td colspan="4" class="text-center py-4">Tu carrito está vacío</td></tr>';
         } else {
             productosCarrito.forEach(prod => {
-                // Multiplicar el precio por la cantidad real del carrito
                 subtotal += parseFloat(prod.precio) * parseInt(prod.cantidad);
-                
                 tabla.innerHTML += `
                     <tr>
                         <td>
                             <div class="d-flex align-items-center">
-                                <img src="../assets/img/prod-${prod.id_producto}.jpg" width="50" class="me-3 rounded" alt="${prod.nombre}" onerror="this.src='../assets/img/default.jpg'">
+                                <img src="../assets/img/prod-${prod.id_producto}.jpg" width="50" class="me-3 rounded" onerror="this.src='../assets/img/default.jpg'">
                                 <span>${prod.nombre}</span>
                             </div>
                         </td>
@@ -310,13 +247,11 @@ async function cargarCarrito() {
                             </div>
                         </td>
                         <td>${parseFloat(prod.precio).toFixed(2)} €</td>
-                        <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarProductoCarrito(${prod.id_producto})">X</button></td>
-                    </tr>
-                `;
+                        <td><button class="btn btn-sm btn-outline-danger" onclick="eliminarProductoCarrito(${prod.id_producto})"><i class="fas fa-trash"></i></button></td>
+                    </tr>`;
             });
         }
 
-        // Actualizar resumen (asumiendo que los elementos existen en el DOM)
         const resumenElementos = document.querySelectorAll('.card-body .d-flex span:nth-child(2)');
         if (resumenElementos.length >= 3) {
             const envio = subtotal > 0 ? 5.00 : 0;
@@ -324,48 +259,168 @@ async function cargarCarrito() {
             resumenElementos[1].innerText = `${envio.toFixed(2)} €`;
             resumenElementos[2].innerText = `${(subtotal + envio).toFixed(2)} €`;
         }
-
     } catch (error) {
         console.error("Error cargando carrito:", error);
     }
 }
 
-// Funciones para modificar y eliminar productos del carrito
 async function modificarCantidadCarrito(idProducto, nuevaCantidad) {
+    if (nuevaCantidad <= 0) return eliminarProductoCarrito(idProducto);
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
-    
-    // Si la cantidad baja a 0, se elimina el producto directamente
-    if (nuevaCantidad <= 0) {
-        return eliminarProductoCarrito(idProducto);
-    }
-
     try {
         await fetch(`${API_URL}/carrito.php`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id_usuario: usuarioLogueado.id_usuario,
-                id_producto: idProducto,
-                cantidad: nuevaCantidad
-            })
+            body: JSON.stringify({ id_usuario: usuarioLogueado.id_usuario, id_producto: idProducto, cantidad: nuevaCantidad })
         });
-        cargarCarrito(); // Recargar la tabla para mostrar los nuevos totales
-    } catch (error) {
-        console.error("Error al actualizar cantidad:", error);
-    }
+        cargarCarrito();
+    } catch (error) { console.error("Error:", error); }
 }
 
 async function eliminarProductoCarrito(idProducto) {
     const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
-    
-    if(confirm("¿Seguro que deseas quitar este producto del carrito?")) {
-        try {
-            await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}&id_producto=${idProducto}`, {
-                method: 'DELETE'
-            });
-            cargarCarrito(); // Recargar la tabla para reflejar el borrado
-        } catch (error) {
-            console.error("Error al eliminar producto:", error);
+    Swal.fire({
+        title: '¿Quitar producto?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, quitar', cancelButtonText: 'Cancelar'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}&id_producto=${idProducto}`, { method: 'DELETE' });
+            cargarCarrito();
+            Swal.fire({ icon: 'success', title: 'Eliminado', showConfirmButton: false, timer: 1000 });
         }
+    });
+}
+
+async function procesarPago() {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    if (!usuarioLogueado) return window.location.href = 'login.html';
+    const tabla = document.getElementById('tabla-carrito');
+    if (!tabla || tabla.innerHTML.trim() === '' || tabla.innerHTML.includes('Tu carrito está vacío')) return Swal.fire('Carrito vacío', 'Añade productos antes de pagar.', 'info');
+
+    const { value: formValues } = await Swal.fire({
+        title: '🔒 Pasarela de Pago Seguro',
+        html: `<input id="swal-card" class="form-control mb-2" placeholder="0000 0000 0000 0000" maxlength="16">
+               <div class="row"><div class="col-6"><input id="swal-date" class="form-control" placeholder="MM/AA"></div>
+               <div class="col-6"><input id="swal-cvv" class="form-control" placeholder="123" type="password"></div></div>`,
+        showCancelButton: true, confirmButtonText: 'Confirmar Pago', cancelButtonText: 'Cancelar', confirmButtonColor: '#198754',
+        preConfirm: () => {
+            if (!document.getElementById('swal-card').value || !document.getElementById('swal-date').value || !document.getElementById('swal-cvv').value) {
+                Swal.showValidationMessage('Complete los datos bancarios');
+            }
+            return true;
+        }
+    });
+
+    if (formValues) {
+        Swal.fire({ title: 'Procesando pago...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const respuesta = await fetch(`${API_URL}/carrito.php`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_usuario: usuarioLogueado.id_usuario, accion: 'pagar' })
+            });
+            const data = await respuesta.json();
+            if (respuesta.ok) {
+                Swal.fire({ icon: 'success', title: '¡Pago Completado!', text: 'Pedido en preparación.', confirmButtonColor: '#198754' }).then(() => window.location.href = 'mis-pedidos.html');
+            } else Swal.fire('Error', data.mensaje, 'error');
+        } catch (error) { Swal.fire('Error', 'Fallo al conectar', 'error'); }
+    }
+}
+
+// ==========================================
+// 4. PERFIL E HISTORIAL
+// ==========================================
+function inicializarPerfil() {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    if (!usuarioLogueado) return window.location.href = 'login.html';
+
+    document.getElementById('perfil-nombre').value = usuarioLogueado.nombre || '';
+    document.getElementById('perfil-apellidos').value = usuarioLogueado.apellidos || '';
+    document.getElementById('perfil-email').value = usuarioLogueado.email || '';
+    document.getElementById('perfil-telefono').value = usuarioLogueado.telefono || '';
+    document.getElementById('perfil-direccion').value = usuarioLogueado.direccion || '';
+
+    const form = document.getElementById('form-perfil');
+    if (form) {
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            try {
+                const respuesta = await fetch(`${API_URL}/usuarios.php`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        id_usuario: usuarioLogueado.id_usuario, 
+                        nombre: document.getElementById('perfil-nombre').value,
+                        apellidos: document.getElementById('perfil-apellidos').value,
+                        telefono: document.getElementById('perfil-telefono').value,
+                        direccion: document.getElementById('perfil-direccion').value
+                    })
+                });
+                const data = await respuesta.json();
+                if (respuesta.ok) {
+                    Swal.fire({ icon: 'success', title: 'Perfil Actualizado', confirmButtonColor: '#198754' }).then(() => {
+                        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+                        window.location.reload();
+                    });
+                } else Swal.fire('Error', data.mensaje, 'error');
+            } catch (error) { Swal.fire('Error', 'No se pudo conectar', 'error'); }
+        };
+    }
+}
+
+async function cargarHistorialPedidos() {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    if (!usuarioLogueado) return window.location.href = 'login.html';
+    const contenedor = document.getElementById('contenedor-pedidos');
+    
+    try {
+        const respuesta = await fetch(`${API_URL}/carrito.php?id_usuario=${usuarioLogueado.id_usuario}&historial=true`);
+        if (respuesta.ok) {
+            const pedidos = await respuesta.json();
+            if (pedidos.length === 0) return contenedor.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted"><i class="fas fa-box-open fa-3x mb-3 text-secondary"></i><br><h5>Aún no has realizado ningún pedido.</h5></td></tr>`;
+            contenedor.innerHTML = '';
+            pedidos.forEach(p => {
+                contenedor.innerHTML += `<tr><td class="ps-4 fw-bold">#${p.id_pedido}</td><td>${new Date(p.fecha_pedido).toLocaleDateString('es-ES')}</td>
+                <td class="fw-bold">${parseFloat(p.total).toFixed(2)} €</td><td><span class="badge bg-success">${p.estado_pedido}</span></td>
+                <td class="text-center"><button class="btn btn-sm btn-outline-primary"><i class="fas fa-eye"></i></button></td></tr>`;
+            });
+        }
+    } catch (error) { contenedor.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Error de carga</td></tr>`; }
+}
+
+// ==========================================
+// 5. ADMIN DASHBOARD
+// ==========================================
+function cerrarSesionAdmin() {
+    localStorage.removeItem('usuario');
+    window.location.href = 'index.html';
+}
+
+async function inicializarAdmin() {
+    const usuarioLogueado = JSON.parse(localStorage.getItem('usuario'));
+    if (!usuarioLogueado || usuarioLogueado.email !== 'admin@globalmarket.com') {
+        return Swal.fire({ icon: 'error', title: 'Acceso Restringido', confirmButtonColor: '#d33', allowOutsideClick: false }).then(() => window.location.href = 'index.html');
+    }
+
+    try {
+        const respuesta = await fetch(`${API_URL}/admin.php`);
+        if (!respuesta.ok) throw new Error("Error en el servidor");
+        
+        const data = await respuesta.json();
+        document.getElementById('admin-ventas').innerText = `${parseFloat(data.ingresos || 0).toFixed(2)} €`;
+        document.getElementById('admin-pedidos-count').innerText = data.pedidos_count || 0;
+        document.getElementById('admin-usuarios').innerText = data.usuarios_count || 0;
+
+        const tbody = document.getElementById('tabla-admin-pedidos');
+        if (data.ultimos_pedidos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-muted">Aún no hay pedidos registrados.</td></tr>`;
+        } else {
+            tbody.innerHTML = '';
+            data.ultimos_pedidos.forEach(p => {
+                let badgeClass = (p.estado_pedido === 'Pendiente') ? 'bg-warning text-dark' : 'bg-success';
+                tbody.innerHTML += `<tr><td class="ps-4 fw-bold text-secondary">#${p.id_pedido}</td><td><i class="fas fa-user-circle"></i> ${p.nombre} ${p.apellidos}</td>
+                <td>${new Date(p.fecha_pedido).toLocaleDateString('es-ES')}</td><td class="fw-bold text-primary">${parseFloat(p.total).toFixed(2)} €</td>
+                <td><span class="badge ${badgeClass}">${p.estado_pedido}</span></td></tr>`;
+            });
+        }
+    } catch (error) {
+        document.getElementById('tabla-admin-pedidos').innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger fw-bold"><i class="fas fa-exclamation-triangle"></i> Fallo de conexión o archivo admin.php no detectado.</td></tr>`;
     }
 }

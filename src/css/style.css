@@ -6,3 +6,52 @@
     object-fit: cover; 
     width: 100%;
 }
+
+/* --- Menú Desplegable de Usuario --- */
+.user-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: .5rem 1rem; 
+}
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: #ffffff;
+    min-width: 180px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.15);
+    border-radius: 8px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.dropdown-content a {
+    color: #333333;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background-color 0.3s;
+}
+
+.dropdown-content a:hover {
+    background-color: #f4f4f4;
+    color: #0056b3;
+}
+
+/* Esta clase será añadida por JavaScript para mostrar el menú */
+.show-dropdown {
+    display: block;
+}
