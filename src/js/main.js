@@ -443,3 +443,61 @@ async function inicializarAdmin() {
         document.getElementById('tabla-admin-pedidos').innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger fw-bold"><i class="fas fa-exclamation-triangle"></i> Fallo de conexión o archivo admin.php no detectado.</td></tr>`;
     }
 }
+
+// Variable global para almacenar los productos cargados
+let todosLosProductos = [];
+
+// Modifica tu función cargarProductos existente para llenar esta variable
+async function cargarProductos(esDestacado) {
+    try {
+        const respuesta = await fetch(`${API_URL}/productos.php`);
+        todosLosProductos = await respuesta.json(); // Guardamos aquí
+        renderizarProductos(esDestacado ? todosLosProductos.slice(0, 4) : todosLosProductos, esDestacado);
+    } catch (error) { console.error("Error:", error); }
+}
+
+// Nueva función de renderizado para reutilizarla al filtrar
+function renderizarProductos(lista, esDestacado) {
+    const contenedor = document.getElementById(esDestacado ? 'featured-products' : 'catalogo-grid');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+    
+    lista.forEach(prod => {
+        contenedor.innerHTML += `
+            <div class="col-md-${esDestacado ? '3' : '4'}">
+                <div class="card h-100 shadow-sm">
+                    <img src="../assets/img/prod-${prod.id_producto}.jpg" class="card-img-top" onerror="this.src='../assets/img/default.jpg'">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">${prod.nombre}</h5>
+                        <p class="card-text fw-bold text-primary">${parseFloat(prod.precio).toFixed(2)} €</p>
+                        <a href="producto-detalle.html?id=${prod.id_producto}" class="btn btn-primary w-100">Comprar</a>
+                    </div>
+                </div>
+            </div>`;
+    });
+}
+
+// Lógica de filtrado
+function aplicarFiltros() {
+    // 1. Obtener valores de los filtros actuales
+    const precioMax = parseFloat(document.getElementById('precioRango').value);
+    const categoriasSeleccionadas = Array.from(document.querySelectorAll('.filtro-cat:checked')).map(c => c.value);
+    const orden = document.getElementById('ordenarSelect').value;
+
+    // 2. Filtrar los productos
+    let resultado = todosLosProductos.filter(prod => {
+        const cumplePrecio = parseFloat(prod.precio) <= precioMax;
+        const cumpleCat = categoriasSeleccionadas.length === 0 || categoriasSeleccionadas.includes(prod.id_categoria.toString());
+        return cumplePrecio && cumpleCat;
+    });
+
+    // 3. Ordenar los resultados filtrados
+    if (orden === 'asc') {
+        resultado.sort((a, b) => parseFloat(a.precio) - parseFloat(b.precio));
+    } else if (orden === 'desc') {
+        resultado.sort((a, b) => parseFloat(b.precio) - parseFloat(a.precio));
+    }
+
+    // 4. Mostrar en pantalla
+    renderizarProductos(resultado, false);
+}
